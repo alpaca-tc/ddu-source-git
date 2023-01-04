@@ -79,11 +79,6 @@ const deleteBranches = async (
 
 export class Kind extends BaseKind<Params> {
   override actions: Actions<Params> = {
-    debug: async (args: { denops: Denops; items: DduItem[] }) => {
-      console.log(args.items);
-      return await Promise.resolve(ActionFlags.None);
-    },
-
     delete_local: async (
       args: { sourceParams: Params; denops: Denops; items: DduItem[] },
     ) => {

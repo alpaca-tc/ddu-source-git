@@ -6,7 +6,7 @@ import {
   Item,
 } from "https://deno.land/x/ddu_vim@v2.0.0/types.ts";
 
-import { Denops } from "https://deno.land/x/ddu_vim@v2.0.0/deps.ts";
+import { Denops, fn, vars } from "https://deno.land/x/ddu_vim@v2.0.0/deps.ts";
 
 export type Params = {
   gitCommand: string;
@@ -18,32 +18,24 @@ export type ActionData = {
 
 export class Kind extends BaseKind<Params> {
   override actions: Actions<Params> = {
-    debug: async (
-      args: { sourceParams: Params; denops: Denops; items: DduItem[] },
-    ) => {
-      console.log(args);
-      return await Promise.resolve(ActionFlags.None);
-    },
-
-    patch: async (
-      args: { sourceParams: Params; denops: Denops; items: DduItem[] },
-    ) => {
-      console.log(args);
-      return await Promise.resolve(ActionFlags.None);
-    },
-
-    diff: async (
-      args: { sourceParams: Params; denops: Denops; items: DduItem[] },
-    ) => {
-      console.log(args);
-      return await Promise.resolve(ActionFlags.None);
-    },
-
     yank_hash: async (
       args: { sourceParams: Params; denops: Denops; items: DduItem[] },
     ) => {
-      console.log(args);
-      return await Promise.resolve(ActionFlags.None);
+      const items = args.items as Item<ActionData>[];
+
+      for (const item of items) {
+        const commit = item.action!.commit;
+
+        await fn.setreg(args.denops, '"', commit, "v");
+        await fn.setreg(
+          args.denops,
+          await vars.v.get(args.denops, "register"),
+          commit,
+          "v",
+        );
+      }
+
+      return Promise.resolve(ActionFlags.Persist);
     },
   };
 
