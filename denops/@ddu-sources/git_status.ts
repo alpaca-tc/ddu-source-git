@@ -11,6 +11,7 @@ import { TextLineStream } from "https://deno.land/std@0.165.0/streams/mod.ts";
 import { StatusSymbol, StatusSymbols } from "../@ddu-kinds/git_status.ts";
 import { join } from "https://deno.land/std@0.159.0/path/mod.ts";
 import { sprintf } from "https://deno.land/std@0.41.0/fmt/sprintf.ts";
+import { getRootDir } from "../getRootDir.ts";
 
 type Params = KindParams & {
   path: string;
@@ -49,7 +50,7 @@ export class Source extends BaseSource<Params> {
   }): ReadableStream<Item<ActionData>[]> {
     const abortController = new AbortController();
 
-    const parseLine = (line: string, cwd: string): Item<ActionData> => {
+    const parseLine = (line: string, rootDir: string): Item<ActionData> => {
       line.trim();
       const match = line.match(STATUS_RE);
 
@@ -67,9 +68,10 @@ export class Source extends BaseSource<Params> {
         return {
           word,
           action: {
+            rootDir,
             index,
             workingTree,
-            fullpath: join(cwd, relativePath),
+            fullpath: join(rootDir, relativePath),
           },
         };
       } else {
@@ -77,8 +79,10 @@ export class Source extends BaseSource<Params> {
       }
     };
 
-    const getRootDir = async (cwd: string): Promise<string | undefined> => {
-      return await this.getRootDir(
+    const scopedGetRootDir = async (
+      cwd: string,
+    ): Promise<string | undefined> => {
+      return await getRootDir(
         cwd,
         args.sourceParams.gitCommand,
         abortController,
@@ -91,15 +95,15 @@ export class Source extends BaseSource<Params> {
           ? await fn.getcwd(args.denops) as string
           : args.sourceParams.path;
 
-        const rootDir = await getRootDir(cwd);
-
-        const items: Item<ActionData>[] = [];
+        const rootDir = await scopedGetRootDir(cwd);
 
         if (!rootDir) {
           // not git directory
-          controller.enqueue(items);
+          controller.enqueue([]);
           return;
         }
+
+        const items: Item<ActionData>[] = [];
 
         const cmd = [
           args.sourceParams.gitCommand,
@@ -158,40 +162,5 @@ export class Source extends BaseSource<Params> {
       gitCommand: "git",
       path: "",
     };
-  }
-
-  private async getRootDir(
-    cwd: string,
-    gitCommand: string,
-    abortController: AbortController,
-  ): Promise<string | undefined> {
-    const cmd = [
-      gitCommand,
-      "rev-parse",
-      "--show-superproject-working-tree",
-      "--show-toplevel",
-    ];
-
-    const proc = Deno.run({
-      cmd: cmd,
-      stdout: "piped",
-      stderr: "piped",
-      stdin: "null",
-      cwd: cwd,
-    });
-
-    const lines: string[] = [];
-
-    for await (
-      const line of abortable(
-        iterLine(proc.stdout),
-        abortController.signal,
-      )
-    ) {
-      line.trim();
-      lines.push(line);
-    }
-
-    return lines[0];
   }
 }

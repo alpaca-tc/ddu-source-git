@@ -27,18 +27,24 @@ export type Params = {
 };
 
 export type ActionData = {
+  rootDir: string;
   fullpath: string;
   workingTree: StatusSymbol;
   index: StatusSymbol;
 };
 
-const runCommand = async (cmd: string[], denops: Denops): Promise<void> => {
+const runCommand = async (
+  cmd: string[],
+  denops: Denops,
+  rootDir: string,
+): Promise<void> => {
   try {
     const p = Deno.run({
       cmd,
       stdout: "piped",
       stderr: "piped",
       stdin: "piped",
+      cwd: rootDir,
     });
 
     await p.status();
@@ -80,6 +86,7 @@ export class Kind extends BaseKind<Params> {
       args: { sourceParams: Params; denops: Denops; items: DduItem[] },
     ) => {
       const items = args.items as (DduItem & Item<ActionData>)[];
+      if (items.length === 0) return;
 
       const cmd: string[] = [
         args.sourceParams.gitCommand,
@@ -87,8 +94,9 @@ export class Kind extends BaseKind<Params> {
       ];
 
       items.forEach((item) => cmd.push(item.action!.fullpath));
+      const rootDir = items[0].action!.rootDir;
 
-      await runCommand(cmd, args.denops);
+      await runCommand(cmd, args.denops, rootDir);
       return await Promise.resolve(ActionFlags.RefreshItems);
     },
 
@@ -104,8 +112,9 @@ export class Kind extends BaseKind<Params> {
       ];
 
       items.forEach((item) => cmd.push(item.action!.fullpath));
+      const rootDir = items[0].action!.rootDir;
 
-      await runCommand(cmd, args.denops);
+      await runCommand(cmd, args.denops, rootDir);
 
       return await Promise.resolve(ActionFlags.RefreshItems);
     },
@@ -121,8 +130,9 @@ export class Kind extends BaseKind<Params> {
       ];
 
       items.forEach((item) => cmd.push(item.action!.fullpath));
+      const rootDir = items[0].action!.rootDir;
 
-      await runCommand(cmd, args.denops);
+      await runCommand(cmd, args.denops, rootDir);
 
       return await Promise.resolve(ActionFlags.RefreshItems);
     },
