@@ -11,12 +11,6 @@ import { sprintf } from "https://deno.land/std@0.41.0/fmt/sprintf.ts";
 import { getRootDir } from "../getRootDir.ts";
 import { iterLine } from "../iterLine.ts";
 
-type Params = KindParams & {
-  path: string;
-  lineCount: number;
-  dateFormat: string;
-};
-
 // "abbreviatedCommit": "%h",
 // "tree": "%T",
 // "abbreviatedTree": "%t",
@@ -30,18 +24,15 @@ type Params = KindParams & {
 
 const PRETTY_FORMAT = `{
   "commit": "%H",
+  "subject": "%s",
   "sanitizedSubjectLine": "%f",
   "refs": "%D",
-  "author": {
-    "name": "%aN",
-    "email": "%aE",
-    "date": "%ad"
-  },
-  "commiter": {
-    "name": "%cN",
-    "email": "%cE",
-    "date": "%cd"
-  }
+  "author_name": "%aN",
+  "author_email": "%aE",
+  "author_date": "%ad",
+  "commiter_name": "%cN",
+  "commiter_email": "%cE",
+  "commiter_date": "%cd"
 }`.replace(/\n/g, " ");
 
 type PrettyFormat = {
@@ -52,24 +43,40 @@ type PrettyFormat = {
   // parent: string;
   // abbreviatedParent: string;
   refs: string;
-  // subject: string;
-  sanitizedSubjectLine: string;
+  subject: string;
+  // sanitizedSubjectLine: string;
   // body: string;
   // commitNotes: string;
   // verificationFlag: string;
   // signer: string;
   // signerKey: string;
   // date: string;
-  author: {
-    name: string;
-    email: string;
-    date: string;
-  };
-  commiter: {
-    name: string;
-    email: string;
-    date: string;
-  };
+  author_name: string;
+  author_email: string;
+  author_date: string;
+  commiter_name: string;
+  commiter_email: string;
+  commiter_date: string;
+};
+
+type Params = KindParams & {
+  path: string;
+  lineCount: number;
+  dateFormat: string;
+  lineFormat: string;
+  wrapFormat: { [K in keyof PrettyFormat]?: string };
+};
+
+const embedVariableRe = /<([^>]+)>/g;
+
+const extractEmbedVariableKeys = (
+  format: string,
+): Array<keyof PrettyFormat> => {
+  const keys = [...format.matchAll(embedVariableRe)].map((m) =>
+    m[1] as keyof PrettyFormat
+  );
+
+  return keys;
 };
 
 export class Source extends BaseSource<Params> {
@@ -87,19 +94,26 @@ export class Source extends BaseSource<Params> {
       line.trim();
 
       const json = JSON.parse(line) as PrettyFormat;
-      let subject = "";
+      const variableKeys = extractEmbedVariableKeys(
+        args.sourceParams.lineFormat,
+      );
+      const format = args.sourceParams.lineFormat.replaceAll(
+        embedVariableRe,
+        "",
+      );
+      const variables = variableKeys.map((key) => {
+        const wrapFormat = args.sourceParams.wrapFormat[key];
 
-      if (json.refs.length > 0) {
-        subject += `(${json.refs}) `;
-      }
-
-      subject += json.sanitizedSubjectLine;
+        if (wrapFormat && json[key]) {
+          return sprintf(wrapFormat, json[key]);
+        } else {
+          return json[key];
+        }
+      });
 
       const word = sprintf(
-        "[%-12s] %s (%s)",
-        json.author.date,
-        subject,
-        json.commiter.name,
+        format,
+        ...variables,
       );
 
       return {
@@ -203,8 +217,12 @@ export class Source extends BaseSource<Params> {
     return {
       gitCommand: "git",
       dateFormat: "format:%Y/%m/%d %H:%M",
+      lineFormat: "%<author_date>10s %<commiter_name>-12s %<subject>s %<refs>s",
       path: "",
       lineCount: 30,
+      wrapFormat: {
+        refs: "{%s}",
+      },
     };
   }
 }
