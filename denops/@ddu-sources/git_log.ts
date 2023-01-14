@@ -217,7 +217,8 @@ export class Source extends BaseSource<Params> {
     return {
       gitCommand: "git",
       dateFormat: "format:%Y/%m/%d %H:%M",
-      lineFormat: "%<author_date>10s %<commiter_name>-12s %<subject>s %<refs>s",
+      lineFormat:
+        "%<author_date>10s %<commiter_name>-11.11s %<subject>s %<refs>s",
       path: "",
       lineCount: 30,
       wrapFormat: {
@@ -226,17 +227,3 @@ export class Source extends BaseSource<Params> {
     };
   }
 }
-
-// const exists = async (path: string) => {
-//   // Note: Deno.stat() may be failed
-//   try {
-//     const stat = await Deno.stat(path);
-//     if (stat.isDirectory || stat.isFile || stat.isSymlink) {
-//       return true;
-//     }
-//   } catch (_: unknown) {
-//     // Ignore stat exception
-//   }
-//
-//   return false;
-// };
