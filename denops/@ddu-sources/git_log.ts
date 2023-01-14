@@ -9,7 +9,7 @@ import { ActionData } from "../@ddu-kinds/git_log.ts";
 import { Params as KindParams } from "../@ddu-kinds/git_log.ts";
 import { sprintf } from "https://deno.land/std@0.41.0/fmt/sprintf.ts";
 import { getRootDir } from "../getRootDir.ts";
-import { iterLine } from "../iterLine.ts";
+import { DelimiterStream } from "https://deno.land/std@0.165.0/streams/mod.ts";
 
 // "abbreviatedCommit": "%h",
 // "tree": "%T",
@@ -20,20 +20,40 @@ import { iterLine } from "../iterLine.ts";
 // "verificationFlag": "%G?",
 // "signer": "%GS",
 // "signerKey": "%GK",
-// "body": "%b",
 
-const PRETTY_FORMAT = `{
-  "commit": "%H",
-  "subject": "%s",
-  "sanitizedSubjectLine": "%f",
-  "refs": "%D",
-  "author_name": "%aN",
-  "author_email": "%aE",
-  "author_date": "%ad",
-  "commiter_name": "%cN",
-  "commiter_email": "%cE",
-  "commiter_date": "%cd"
-}`.replace(/\n/g, " ");
+const FORMAT_DELIMITER = "---*DELIMITER*---";
+const FORMAT_END = "---*END*---";
+
+const PRETTY_FORMATS: { [key: string]: string } = {
+  commit: "%H",
+  subject: "%s",
+  body: "%b",
+  sanitizedSubjectLine: "%f",
+  refs: "%D",
+  author_name: "%aN",
+  author_email: "%aE",
+  author_date: "%ad",
+  commiter_name: "%cN",
+  commiter_email: "%cE",
+  commiter_date: "%cd",
+};
+
+const PRETTY_FORMAT =
+  Object.keys(PRETTY_FORMATS).map((key) =>
+    `${key}${FORMAT_DELIMITER}${PRETTY_FORMATS[key]}${FORMAT_DELIMITER}`
+  ).join("") + FORMAT_END;
+
+const eachPair = (
+  arr: string[],
+  iterator: (key: string, value: string) => void,
+): void => {
+  for (let i = 0, l = arr.length; i < l; i += 2) {
+    const key = arr[i];
+    const value = arr[i + 1];
+
+    iterator(key, value);
+  }
+};
 
 type PrettyFormat = {
   commit: string;
@@ -45,7 +65,7 @@ type PrettyFormat = {
   refs: string;
   subject: string;
   // sanitizedSubjectLine: string;
-  // body: string;
+  body: string;
   // commitNotes: string;
   // verificationFlag: string;
   // signer: string;
@@ -58,6 +78,19 @@ type PrettyFormat = {
   commiter_email: string;
   commiter_date: string;
 };
+
+const PRETTY_FORMAT_KEYS: Array<keyof PrettyFormat> = [
+  "commit",
+  "refs",
+  "subject",
+  "body",
+  "author_name",
+  "author_email",
+  "author_date",
+  "commiter_name",
+  "commiter_email",
+  "commiter_date",
+];
 
 type Params = KindParams & {
   path: string;
@@ -79,6 +112,31 @@ const extractEmbedVariableKeys = (
   return keys;
 };
 
+const verifyPrettyFormat = (
+  h: { [key: string]: unknown },
+): h is PrettyFormat => {
+  let valid = true;
+
+  PRETTY_FORMAT_KEYS.forEach((key) => {
+    valid &&= typeof h[key] === "string";
+  });
+
+  return valid;
+};
+
+const iterRow = async function* (
+  r: Deno.Reader,
+): AsyncIterable<string> {
+  const lines = r.readable
+    .pipeThrough(new DelimiterStream(new TextEncoder().encode(FORMAT_END)))
+    .pipeThrough(new TextDecoderStream());
+
+  for await (const line of lines) {
+    if (line.length) {
+      yield line;
+    }
+  }
+};
 export class Source extends BaseSource<Params> {
   override kind = "git_log";
 
@@ -90,10 +148,20 @@ export class Source extends BaseSource<Params> {
   }): ReadableStream<Item<ActionData>[]> {
     const abortController = new AbortController();
 
-    const parseLine = (line: string): Item<ActionData> => {
-      line.trim();
+    const parseRow = (row: string): Item<ActionData> => {
+      row = row.trim();
 
-      const json = JSON.parse(line) as PrettyFormat;
+      const json: { [key: string]: string } = {};
+
+      eachPair(row.split(FORMAT_DELIMITER), (key, value) => {
+        json[key] = value;
+      });
+
+      if (!verifyPrettyFormat(json)) {
+        console.log({ json, row });
+        console.error(new Error("failed to parse result of git log"));
+      }
+
       const variableKeys = extractEmbedVariableKeys(
         args.sourceParams.lineFormat,
       );
@@ -120,6 +188,15 @@ export class Source extends BaseSource<Params> {
         word,
         action: {
           commit: json.commit,
+          subject: json.subject,
+          body: json.body,
+          author_name: json.author_name,
+          author_email: json.author_email,
+          author_date: json.author_date,
+          commiter_name: json.commiter_name,
+          commiter_email: json.commiter_email,
+          commiter_date: json.commiter_date,
+          refs: json.refs,
         },
       };
     };
@@ -170,12 +247,12 @@ export class Source extends BaseSource<Params> {
 
         try {
           for await (
-            const line of abortable(
-              iterLine(proc.stdout),
+            const row of abortable(
+              iterRow(proc.stdout),
               abortController.signal,
             )
           ) {
-            items.push(parseLine(line));
+            items.push(parseRow(row));
 
             if (maxItems < items.length) {
               // Update items

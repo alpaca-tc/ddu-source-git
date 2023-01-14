@@ -136,29 +136,6 @@ export class Source extends BaseSource<Params> {
     });
   }
 
-  // override async checkUpdated(args: {
-  //   denops: Denops;
-  //   sourceOptions: SourceOptions;
-  // }): Promise<boolean> {
-  //   let dir = args.sourceOptions.path;
-  //   if (dir == "") {
-  //     dir = await fn.getcwd(args.denops) as string;
-  //   }
-  //
-  //   if (!(await exists(dir))) {
-  //     return false;
-  //   }
-  //
-  //   const stat = await Deno.stat(dir);
-  //   if (!stat.mtime) {
-  //     return false;
-  //   }
-  //   const check = stat.mtime > this.prevMtime;
-  //   this.prevMtime = stat.mtime;
-  //
-  //   return check;
-  // }
-
   override params(): Params {
     return {
       gitCommand: "git",
@@ -167,17 +144,3 @@ export class Source extends BaseSource<Params> {
     };
   }
 }
-
-// const exists = async (path: string) => {
-//   // Note: Deno.stat() may be failed
-//   try {
-//     const stat = await Deno.stat(path);
-//     if (stat.isDirectory || stat.isFile || stat.isSymlink) {
-//       return true;
-//     }
-//   } catch (_: unknown) {
-//     // Ignore stat exception
-//   }
-//
-//   return false;
-// };
