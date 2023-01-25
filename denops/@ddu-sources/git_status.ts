@@ -29,7 +29,7 @@ async function* iterLine(r: Deno.Reader): AsyncIterable<string> {
   }
 }
 
-const STATUS_RE = /^(.)(.)\s(.*)$/;
+const STATUS_RE = /^(.)(.)\s"?(.*?)"?$/;
 
 const resolveStatusSymbol = (maybeSymbol: string): StatusSymbol => {
   if (maybeSymbol in StatusSymbols) {
