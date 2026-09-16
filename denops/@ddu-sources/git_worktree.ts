@@ -6,6 +6,7 @@ import {
 import { Denops, fn } from "https://deno.land/x/ddu_vim@v2.0.0/deps.ts";
 import { abortable } from "https://deno.land/std@0.165.0/async/mod.ts";
 import { sprintf } from "https://deno.land/std@0.41.0/fmt/sprintf.ts";
+import { relative } from "https://deno.land/std@0.165.0/path/mod.ts";
 import { ActionData } from "../@ddu-kinds/git_worktree.ts";
 import { Params as KindParams } from "../@ddu-kinds/git_worktree.ts";
 import { getRootDir } from "../getRootDir.ts";
@@ -13,6 +14,7 @@ import { iterLine } from "../iterLine.ts";
 
 type Params = KindParams & {
   path: string;
+  current: boolean;
 };
 
 type WorktreeRecord = {
@@ -112,7 +114,15 @@ export class Source extends BaseSource<Params> {
 
           const records = parsePorcelain(lines);
 
-          const items: Item<ActionData>[] = records.map((record) => {
+          const displayPaths = records.map((record) =>
+            args.sourceParams.current ? relative(cwd, record.path) : record.path
+          );
+          const pathWidth = Math.max(
+            40,
+            ...displayPaths.map((p) => p.length),
+          );
+
+          const items: Item<ActionData>[] = records.map((record, i) => {
             const isCurrent = record.path === cwd;
             const suffix = record.isBare
               ? "(bare)"
@@ -121,9 +131,9 @@ export class Source extends BaseSource<Params> {
               : record.branch;
 
             const word = sprintf(
-              "%s %-40s %s",
+              `%s %-${pathWidth}s %s`,
               isCurrent ? "*" : " ",
-              record.path,
+              displayPaths[i],
               suffix,
             );
 
@@ -178,6 +188,7 @@ export class Source extends BaseSource<Params> {
       deleteCommand: [],
       forceDeleteCommand: [],
       path: "",
+      current: false,
     };
   }
 }
